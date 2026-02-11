@@ -31,6 +31,16 @@ defmodule Rustler.Compiler.Config do
 
   alias Rustler.Compiler.Config
 
+  defp maybe_use_prebuilt(opts, otp_app) do
+    case System.get_env("RUSTLER_FORCE_USE_PREBUILT") do
+      nil -> opts
+      path ->
+        opts
+        |> Keyword.put(:skip_compilation?, true)
+        |> Keyword.put(:load_from, {otp_app, path})
+    end
+  end
+
   def from(otp_app, config, opts) do
     crate = config[:crate] || opts[:crate] || otp_app
 
@@ -47,6 +57,7 @@ defmodule Rustler.Compiler.Config do
     |> Enum.into([])
     |> Keyword.merge(opts)
     |> Keyword.merge(config)
+    |> maybe_use_prebuilt(otp_app)
     |> build()
   end
 
