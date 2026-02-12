@@ -159,6 +159,9 @@ defmodule Rustler do
         load_path =
           otp_app
           |> Application.app_dir(path)
+          |> String.replace_suffix(".so", "")
+          |> String.replace_suffix(".dylib", "")
+          |> String.replace_suffix(".dll", "")
           |> to_charlist()
 
         load_data = unquote(load_data)
