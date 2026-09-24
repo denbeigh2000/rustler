@@ -33,11 +33,53 @@ defmodule Rustler.Compiler.Config do
 
   defp maybe_use_prebuilt(opts, otp_app) do
     case System.get_env("RUSTLER_FORCE_USE_PREBUILT") do
-      nil -> opts
+      nil ->
+        opts
+
       path ->
+        verify_prebuilt!(otp_app, path)
+
         opts
         |> Keyword.put(:skip_compilation?, true)
         |> Keyword.put(:load_from, {otp_app, path})
+    end
+  end
+
+  # RUSTLER_FORCE_USE_PREBUILT skips `cargo build` entirely and trusts that
+  # whatever set the env var also staged a matching .so. If it didn't, the
+  # only symptom used to be a swallowed on_load warning at NIF-load time:
+  # Erlang's code server logs on_load failures but never fails the caller,
+  # even when on_load raises. Compile-time is the only point in this path
+  # that can actually fail the build, so we check here instead.
+  defp verify_prebuilt!(otp_app, path) do
+    full_path = prebuilt_so_path(otp_app, path)
+
+    unless File.regular?(full_path) do
+      raise """
+      RUSTLER_FORCE_USE_PREBUILT is set to #{inspect(path)} for #{inspect(otp_app)}, \
+      but no file exists at:
+
+          #{full_path}
+
+      Whatever staged this env var didn't actually stage a matching artifact.
+      """
+    end
+  end
+
+  defp prebuilt_so_path(otp_app, path) do
+    otp_app
+    |> Application.app_dir(path)
+    |> String.replace_suffix(".so", "")
+    |> String.replace_suffix(".dylib", "")
+    |> String.replace_suffix(".dll", "")
+    |> Kernel.<>(nif_suffix())
+  end
+
+  defp nif_suffix do
+    case :os.type() do
+      {:unix, :darwin} -> ".dylib"
+      {:win32, _} -> ".dll"
+      _ -> ".so"
     end
   end
 
