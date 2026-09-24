@@ -45,12 +45,9 @@ defmodule Rustler.Compiler.Config do
     end
   end
 
-  # RUSTLER_FORCE_USE_PREBUILT skips `cargo build` entirely and trusts that
-  # whatever set the env var also staged a matching .so. If it didn't, the
-  # only symptom used to be a swallowed on_load warning at NIF-load time:
-  # Erlang's code server logs on_load failures but never fails the caller,
-  # even when on_load raises. Compile-time is the only point in this path
-  # that can actually fail the build, so we check here instead.
+  # on_load failures never fail the build (even a raise there is swallowed
+  # by the code server), so this is the only point that can actually catch
+  # a missing prebuilt artifact at compile time.
   defp verify_prebuilt!(otp_app, path) do
     full_path = prebuilt_so_path(otp_app, path)
 
