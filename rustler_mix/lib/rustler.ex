@@ -150,23 +150,40 @@ defmodule Rustler do
 
       @doc false
       def rustler_init do
-        # Remove any old modules that may be loaded so we don't get
-        # {:error, {:upgrade, 'Upgrade not supported by this NIF library.'}}
-        :code.purge(__MODULE__)
+        # Bazel keeps the NIF out of the mix compile sandbox, but elixirc
+        # still loads every module it compiles. Without this, the failed load
+        # gets logged by the code server as an on_load warning on every build.
+        # Only set this for compilation: at runtime, NIF calls would raise
+        # :nif_not_loaded.
+        if System.get_env("RUSTLER_SKIP_NIF_LOAD") do
+          :ok
+        else
+          # Remove any old modules that may be loaded so we don't get
+          # {:error, {:upgrade, 'Upgrade not supported by this NIF library.'}}
+          :code.purge(__MODULE__)
 
-        {otp_app, path} = @load_from
+          {otp_app, path} = @load_from
 
-        load_path =
-          otp_app
-          |> Application.app_dir(path)
-          |> String.replace_suffix(".so", "")
-          |> String.replace_suffix(".dylib", "")
-          |> String.replace_suffix(".dll", "")
-          |> to_charlist()
+          # erl_ddll appends a hard-coded suffix: ".dll" on win32, ".so" on
+          # every unix, darwin included (see FILE_EXT in OTP's
+          # erts/emulator/sys/{unix,win32}/erl_*_sys_ddll.c). Stripping any
+          # other suffix would just make it look for the wrong file.
+          ext =
+            case :os.type() do
+              {:win32, _} -> ".dll"
+              {:unix, _} -> ".so"
+            end
 
-        load_data = unquote(load_data)
+          load_path =
+            otp_app
+            |> Application.app_dir(path)
+            |> String.replace_suffix(ext, "")
+            |> to_charlist()
 
-        :erlang.load_nif(load_path, load_data)
+          load_data = unquote(load_data)
+
+          :erlang.load_nif(load_path, load_data)
+        end
       end
     end
   end
